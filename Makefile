@@ -1,8 +1,8 @@
-.PHONY: build pull pack-example pack-submission test-submission _echo_image_name _submission_write_perms
+.PHONY: build pull pack-example pack-submission test-submission _check_image _echo_image _submission_write_perms
 
-# ================================================================================================
-# Settings
-# ================================================================================================
+#################################################################################
+# Settings                                                                      #
+#################################################################################
 
 ifeq (, $(shell which nvidia-smi))
 CPU_OR_GPU ?= cpu
@@ -10,6 +10,28 @@ else
 CPU_OR_GPU ?= gpu
 endif
 
+TAG := ${CPU_OR_GPU}-latest
+LOCAL_TAG := ${CPU_OR_GPU}-local
+
+OFFICIAL_IMAGE = nasapushback.azurecr.io/nasapushback-competition
+LOCAL_IMAGE = nasapushback-competition
+
+# Resolve which image to use in commands. The priority is:
+# 1. User-provided, e.g., SUBMISSION_IMAGE=my-image:gpu-local make test-submission
+# 2. Local image, e.g., nasapushback-competition:gpu-local
+# 3. Official competition image, e.g., nasapushback.azurecr.io/nasapushback-competition
+SUBMISSION_IMAGE ?= ${LOCAL_IMAGE}:${TAG}
+ifeq (,$(shell docker images -q ${SUBMISSION_IMAGE}))
+SUBMISSION_IMAGE = ${OFFICIAL_IMAGE}:${TAG}
+endif
+
+# Get the image ID
+SUBMISSION_IMAGE_ID := $(shell docker images -q ${SUBMISSION_IMAGE})
+
+# Name of the running container, i.e., docker run ... --name <CONTAINER_NAME>
+CONTAINER_NAME ?= nasapushback
+
+# Enable or disable host GPU access
 ifeq (${CPU_OR_GPU}, gpu)
 GPU_ARGS = --gpus all
 endif
@@ -19,32 +41,17 @@ ifeq (${SKIP_GPU}, true)
 GPU_ARGS =
 endif
 
-TAG = ${CPU_OR_GPU}-latest
-LOCAL_TAG = ${CPU_OR_GPU}-local
-
-REPO = nasapushback-competition
-REGISTRY_IMAGE = nasapushback.azurecr.io/${REPO}:${TAG}
-LOCAL_IMAGE = ${REPO}:${LOCAL_TAG}
-CONTAINER_NAME = nasapushback
-
-# if not TTY (for example GithubActions CI) no interactive tty commands for docker
+# If no TTY (for example GitHub Actions CI) no interactive tty commands for docker
 ifneq (true, ${GITHUB_ACTIONS_NO_TTY})
 TTY_ARGS = -it
 endif
 
-# option to block or allow internet access from the submission Docker container
+# Option to block or allow internet access from the submission Docker container
 ifeq (true, ${BLOCK_INTERNET})
 NETWORK_ARGS = --network none
 endif
 
-# To run a submission, use local version if that exists; otherwise, use official version
-# setting SUBMISSION_IMAGE as an environment variable will override the image
-SUBMISSION_IMAGE ?= $(shell docker images -q ${LOCAL_IMAGE})
-ifeq (,${SUBMISSION_IMAGE})
-SUBMISSION_IMAGE := $(shell docker images -q ${REGISTRY_IMAGE})
-endif
-
-# name of the example submission to pack when running `make pack-example`
+# Name of the example submission to pack when running `make pack-example`
 EXAMPLE ?= fuser_etd_minus_15_min_benchmark
 
 # Give write access to the submission folder to everyone so Docker user can write when mounted
@@ -53,31 +60,55 @@ _submission_write_perms:
 	chmod -R 0777 submission/
 
 
-_echo_image_name:
-	@echo Using image:
-	@docker images | awk 'NR==1; /${SUBMISSION_IMAGE}/'
+_check_image:
+# If container does not exist, error and tell user to pull or build
+ifeq (${SUBMISSION_IMAGE_ID},)
+	$(error To test your submission, you must first run `make pull` (to get official container) or `make build` \
+		(to build a local version if you have changes).)
+endif
 
-# ================================================================================================
-# Commands for building the container if you are changing the requirements
-# ================================================================================================
+_echo_image:
+	@echo ${SUBMISSION_IMAGE} hi
+	@echo "$$(tput bold)Available competition images:$$(tput sgr0)"
+	@echo
+	@echo "┏"
+	@docker images ${OFFICIAL_IMAGE} | awk '{print "┃ "$$0}'
+	@echo "└"
+	@echo
+ifeq (,${SUBMISSION_IMAGE_ID})
+	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (image does not exist locally)"
+else
+	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (${SUBMISSION_IMAGE_ID})"
+	@echo
+	@echo "┏"
+	@echo "┃ NAME(S)"
+	@docker inspect $(SUBMISSION_IMAGE_ID) --format='{{join .RepoTags "\n"}}' | awk '{print "┃ "$$0}'
+	@echo "└"
+	@echo
+endif
+
+
+#################################################################################
+# Commands for building the container if you are changing the requirements      #
+#################################################################################
 
 ## Builds the container locally
 build:
-	docker build --build-arg CPU_OR_GPU=${CPU_OR_GPU} -t ${LOCAL_IMAGE} runtime
+	docker build --build-arg CPU_OR_GPU=${CPU_OR_GPU} -t ${LOCAL_IMAGE}:${LOCAL_TAG} runtime
 
 ## Ensures that your locally built container can import all the Python packages successfully when it runs
-test-container: _echo_image_name _submission_write_perms
+test-container: _check_image _echo_image _submission_write_perms
 	docker run \
 		${GPU_ARGS} \
 		${TTY_ARGS} \
 		--mount type=bind,source="$(shell pwd)"/runtime/tests,target=/tests,readonly \
 		--pid host \
 		--entrypoint /bin/bash \
-		${SUBMISSION_IMAGE} \
+		${SUBMISSION_IMAGE_ID} \
 		-c "conda run --no-capture-output -n nasa-pushback python -m pytest tests"
 
 ## Open an interactive bash shell within the running container (with network access)
-interact-container: _echo_image_name _submission_write_perms
+interact-container: _check_image _echo_image _submission_write_perms
 	docker run \
 		${GPU_ARGS} \
 		--mount type=bind,source="$(shell pwd)"/data,target=/code_execution/data,readonly \
@@ -86,11 +117,11 @@ interact-container: _echo_image_name _submission_write_perms
 		--pid host \
 		-it \
 		--entrypoint /bin/bash \
-		${SUBMISSION_IMAGE}
+		${SUBMISSION_IMAGE_ID}
 
 ## Pulls the official container from Azure Container Registry
 pull:
-	docker pull ${REGISTRY_IMAGE}
+	docker pull ${OFFICIAL_IMAGE}:${TAG}
 
 ## Creates a submission/submission.zip file from the source code in examples_src
 pack-example:
@@ -111,17 +142,11 @@ endif
 	cd submission_src; zip -r ../submission/submission.zip ./*
 
 ## Runs container using code from `submission/submission.zip` and data from `data/`
-test-submission: _echo_image_name _submission_write_perms
+test-submission: _check_image _echo_image _submission_write_perms
 # if submission file does not exist
 ifeq (,$(wildcard ./submission/submission.zip))
 	$(error To test your submission, you must first put a "submission.zip" file in the "submission" folder. \
 	  If you want to use the benchmark, you can run `make pack-example <benchmark name>` first)
-endif
-
-# if container does not exist, error and tell user to pull or build
-ifeq (${SUBMISSION_IMAGE},)
-	$(error To test your submission, you must first run `make pull` (to get official container) or `make build` \
-		(to build a local version if you have changes).)
 endif
 	docker run \
 		${TTY_ARGS} \
@@ -134,7 +159,7 @@ endif
 		--pid host \
 		--name ${CONTAINER_NAME} \
 		--rm \
-		${SUBMISSION_IMAGE}
+		${SUBMISSION_IMAGE_ID}
 
 ## Delete temporary Python cache and bytecode files
 clean:
@@ -163,13 +188,7 @@ clean:
 # Separate expressions are necessary because labels cannot be delimited by
 # semicolon; see <http://stackoverflow.com/a/11799865/1968>
 .PHONY: help
-help:
-	@echo
-	@echo "$$(tput bold)Settings based on your machine:$$(tput sgr0)"
-	@echo SUBMISSION_IMAGE=${SUBMISSION_IMAGE}  "\t# ID of the image that will be used when running test-submission"
-	@echo
-	@echo "$$(tput bold)Available competition images:$$(tput sgr0)"
-	@echo "$(shell docker images --format '{{.Repository}}:{{.Tag}} ({{.ID}}); ' ${REGISTRY_IMAGE})"
+help: _echo_image
 	@echo
 	@echo "$$(tput bold)Available commands:$$(tput sgr0)"
 	@echo
@@ -208,3 +227,4 @@ help:
 		printf "\n"; \
 	}' \
 	| more $(shell test $(shell uname) = Darwin && echo '--no-init --raw-control-chars')
+	@echo
