@@ -3,6 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - catboost=1.1.1
   - cudatoolkit=11.2
   - eigen=3.4.0
   - keras=2.11.0
