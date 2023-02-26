@@ -13,8 +13,9 @@ endif
 TAG := ${CPU_OR_GPU}-latest
 LOCAL_TAG := ${CPU_OR_GPU}-local
 
-OFFICIAL_IMAGE = nasapushback.azurecr.io/nasapushback-competition
-LOCAL_IMAGE = nasapushback-competition
+IMAGE_NAME = nasapushback-competition
+OFFICIAL_IMAGE = nasapushback.azurecr.io/${IMAGE_NAME}
+LOCAL_IMAGE = ${IMAGE_NAME}
 
 # Resolve which image to use in commands. The priority is:
 # 1. User-provided, e.g., SUBMISSION_IMAGE=my-image:gpu-local make test-submission
@@ -68,15 +69,34 @@ ifeq (${SUBMISSION_IMAGE_ID},)
 endif
 
 _echo_image:
-	@echo ${SUBMISSION_IMAGE} hi
-	@echo "$$(tput bold)Available competition images:$$(tput sgr0)"
+	@echo
+ifeq (,$(shell docker images ${OFFICIAL_IMAGE} -q))
+	@echo "$$(tput bold)No official images available locally$$(tput sgr0)"
+	@echo "Run 'make pull' to download the official image."
+	@echo
+else
+	@echo "$$(tput bold)Available official images:$$(tput sgr0)"
 	@echo
 	@echo "┏"
 	@docker images ${OFFICIAL_IMAGE} | awk '{print "┃ "$$0}'
 	@echo "└"
 	@echo
+endif
+ifeq (,$(shell docker images ${LOCAL_IMAGE} -q))
+	@echo "$$(tput bold)No local images available$$(tput sgr0)"
+	@echo "Run 'make build' to build the image."
+	@echo
+else
+	@echo "$$(tput bold)Available local images:$$(tput sgr0)"
+	@echo
+	@echo "┏"
+	@docker images ${LOCAL_IMAGE} | awk '{print "┃ "$$0}'
+	@echo "└"
+	@echo
+endif
 ifeq (,${SUBMISSION_IMAGE_ID})
 	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (image does not exist locally)"
+	@echo
 else
 	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (${SUBMISSION_IMAGE_ID})"
 	@echo
