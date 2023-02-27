@@ -70,6 +70,18 @@ endif
 
 _echo_image:
 	@echo
+ifeq (,${SUBMISSION_IMAGE_ID})
+	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (image does not exist locally)"
+	@echo
+else
+	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (${SUBMISSION_IMAGE_ID})"
+	@echo
+	@echo "┏"
+	@echo "┃ NAME(S)"
+	@docker inspect $(SUBMISSION_IMAGE_ID) --format='{{join .RepoTags "\n"}}' | awk '{print "┃ "$$0}'
+	@echo "└"
+	@echo
+endif
 ifeq (,$(shell docker images ${OFFICIAL_IMAGE} -q))
 	@echo "$$(tput bold)No official images available locally$$(tput sgr0)"
 	@echo "Run 'make pull' to download the official image."
@@ -94,19 +106,6 @@ else
 	@echo "└"
 	@echo
 endif
-ifeq (,${SUBMISSION_IMAGE_ID})
-	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (image does not exist locally)"
-	@echo
-else
-	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (${SUBMISSION_IMAGE_ID})"
-	@echo
-	@echo "┏"
-	@echo "┃ NAME(S)"
-	@docker inspect $(SUBMISSION_IMAGE_ID) --format='{{join .RepoTags "\n"}}' | awk '{print "┃ "$$0}'
-	@echo "└"
-	@echo
-endif
-
 
 #################################################################################
 # Commands for building the container if you are changing the requirements      #
