@@ -133,6 +133,8 @@ make pack-submission
 make test-submission
 ```
 
+Run `make help` for more information about the available commands as well as information on the official and built images that are available locally.
+
 Here's the process in a bit more detail:
 
 1. First, make sure you have set up the [prerequisites](#prerequisites).
