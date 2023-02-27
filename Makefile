@@ -21,7 +21,7 @@ LOCAL_IMAGE = ${IMAGE_NAME}
 # 1. User-provided, e.g., SUBMISSION_IMAGE=my-image:gpu-local make test-submission
 # 2. Local image, e.g., nasapushback-competition:gpu-local
 # 3. Official competition image, e.g., nasapushback.azurecr.io/nasapushback-competition
-SUBMISSION_IMAGE ?= ${LOCAL_IMAGE}:${TAG}
+SUBMISSION_IMAGE ?= ${LOCAL_IMAGE}:${LOCAL_TAG}
 ifeq (,$(shell docker images -q ${SUBMISSION_IMAGE}))
 SUBMISSION_IMAGE = ${OFFICIAL_IMAGE}:${TAG}
 endif
