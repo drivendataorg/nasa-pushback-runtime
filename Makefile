@@ -75,7 +75,6 @@ ifeq (,${SUBMISSION_IMAGE_ID})
 	@echo
 else
 	@echo "$$(tput bold)Using image:$$(tput sgr0) ${SUBMISSION_IMAGE} (${SUBMISSION_IMAGE_ID})"
-	@echo
 	@echo "┏"
 	@echo "┃ NAME(S)"
 	@docker inspect $(SUBMISSION_IMAGE_ID) --format='{{join .RepoTags "\n"}}' | awk '{print "┃ "$$0}'
@@ -88,7 +87,6 @@ ifeq (,$(shell docker images ${OFFICIAL_IMAGE} -q))
 	@echo
 else
 	@echo "$$(tput bold)Available official images:$$(tput sgr0)"
-	@echo
 	@echo "┏"
 	@docker images ${OFFICIAL_IMAGE} | awk '{print "┃ "$$0}'
 	@echo "└"
@@ -100,7 +98,6 @@ ifeq (,$(shell docker images ${LOCAL_IMAGE} -q))
 	@echo
 else
 	@echo "$$(tput bold)Available local images:$$(tput sgr0)"
-	@echo
 	@echo "┏"
 	@docker images ${LOCAL_IMAGE} | awk '{print "┃ "$$0}'
 	@echo "└"
