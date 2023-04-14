@@ -39,3 +39,4 @@ dependencies:
   - torchmetrics=0.11.1
   - tqdm=4.64.1
   - xgboost=1.7.1=cuda112py310*
+  - intervaltree=3.0.2
